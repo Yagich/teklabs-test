@@ -16,7 +16,11 @@ import java.io.IOException;
 
 class RestAuthenticationFilter extends GenericFilterBean {
 
-    private AuthTokenService authTokenService;
+    private final AuthTokenService authTokenService;
+
+    RestAuthenticationFilter(AuthTokenService authTokenService) {
+        this.authTokenService = authTokenService;
+    }
 
     @Override
     public void doFilter(ServletRequest request, ServletResponse response,
@@ -47,7 +51,4 @@ class RestAuthenticationFilter extends GenericFilterBean {
         return authTokenService.getUserDetailsByToken(authToken);
     }
 
-    public void setAuthTokenService(AuthTokenService authTokenService) {
-        this.authTokenService = authTokenService;
-    }
 }

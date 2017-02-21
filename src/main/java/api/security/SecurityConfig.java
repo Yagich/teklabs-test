@@ -75,9 +75,7 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
     }
 
     private Filter restAuthenticationFilter() {
-        RestAuthenticationFilter authenticationFilter = new RestAuthenticationFilter();
-        authenticationFilter.setAuthTokenService(authTokenService);
-        return authenticationFilter;
+        return new RestAuthenticationFilter(authTokenService);
     }
 
     private AuthenticationFailureHandler authenticationFailureHandler() {

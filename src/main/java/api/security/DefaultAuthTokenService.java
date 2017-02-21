@@ -5,78 +5,99 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.stereotype.Component;
+import org.springframework.util.Assert;
 
 import java.math.BigInteger;
 import java.security.SecureRandom;
 import java.time.Instant;
-import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 
 @Component
 public class DefaultAuthTokenService implements AuthTokenService {
-    private SecureRandom secureRandom = new SecureRandom();
-    private Map<AuthToken, String> tokenUserMap = new ConcurrentHashMap<>();
-    private Map<AuthToken, Instant> tokenExpirationMap = new ConcurrentHashMap<>();
+    private final UserDetailsService userDetailsService;
+    private final Integer expirationMinutes;
+
+    private final ConcurrentMap<AuthToken, AuthTokenInfo> tokenUserMap = new ConcurrentHashMap<>();
+    private final SecureRandom secureRandom = new SecureRandom();
 
     @Autowired
-    UserDetailsService userDetailsService;
-
-    @Value("${auth.token.expirationMinutes}")
-    Integer expirationMinutes;
+    public DefaultAuthTokenService(UserDetailsService userDetailsService,
+                                   @Value("${auth.token.expirationMinutes}") Integer expirationMinutes) {
+        this.userDetailsService = userDetailsService;
+        this.expirationMinutes = expirationMinutes;
+    }
 
     @Override
     public AuthToken registerUserToken(String username) {
-        if (tokenUserMap.containsValue(username)) {
-            removeUserToken(username);
-        }
-        AuthToken authToken = generateToken();
-        tokenUserMap.put(authToken, username);
-        registerTokenExpiration(authToken);
-        return authToken;
+        removeCurrentToken(username);
+        return registerNewToken(username);
     }
 
-    private void removeUserToken(String username) {
-        AuthToken token = tokenUserMap.entrySet().stream()
-                .filter(e -> e.getValue().equals(username))
-                .map(Map.Entry::getKey)
-                .findFirst().orElse(null);
-
-        tokenUserMap.values().remove(username);
-        tokenExpirationMap.remove(token);
+    private void removeCurrentToken(String username) {
+        AuthTokenInfo usernameTokenInfo = AuthTokenInfo.fromUsername(username);
+        tokenUserMap.values().remove(usernameTokenInfo);
     }
 
-    private AuthToken generateToken() {
-        String tokenValue = new BigInteger(130, secureRandom).toString(32);
-        return new AuthToken(tokenValue);
-    }
-
-    private void registerTokenExpiration(AuthToken authToken) {
-        Instant expiration = Instant.now().plusSeconds(expirationMinutes * 60);
-        tokenExpirationMap.put(authToken, expiration);
+    private AuthToken registerNewToken(String username) {
+        AuthToken token = new AuthToken(new BigInteger(130, secureRandom).toString(32));
+        Instant expiredAt = Instant.now().plusSeconds(expirationMinutes * 60);
+        tokenUserMap.put(token, new AuthTokenInfo(username, expiredAt));
+        return token;
     }
 
     @Override
     public UserDetails getUserDetailsByToken(AuthToken authToken) {
-        String username = tokenUserMap.get(authToken);
-        if (username == null) {
+        AuthTokenInfo tokenInfo = tokenUserMap.get(authToken);
+        if (tokenInfo == null) {
             return null;
         }
-        if (tokenIsExpired(authToken)) {
+        if (tokenInfo.isExpired()) {
             unregisterToken(authToken);
             return null;
         }
-        return userDetailsService.loadUserByUsername(username);
-    }
-
-    private boolean tokenIsExpired(AuthToken authToken) {
-        Instant expiration = tokenExpirationMap.get(authToken);
-        return expiration.isBefore(Instant.now());
+        return userDetailsService.loadUserByUsername(tokenInfo.username);
     }
 
     @Override
     public void unregisterToken(AuthToken authToken) {
         tokenUserMap.remove(authToken);
-        tokenExpirationMap.remove(authToken);
     }
+
+    private static final class AuthTokenInfo {
+        private final String username;
+        private final Instant expiredAt;
+
+        AuthTokenInfo(String username, Instant expiredAt) {
+            Assert.notNull(username);
+            Assert.notNull(expiredAt);
+            this.username = username;
+            this.expiredAt = expiredAt;
+        }
+
+        boolean isExpired() {
+            return expiredAt.isBefore(Instant.now());
+        }
+
+        static AuthTokenInfo fromUsername(String username) {
+            return new AuthTokenInfo(username, Instant.MIN);
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            final AuthTokenInfo that = (AuthTokenInfo) o;
+            return Objects.equals(username, that.username);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(username);
+        }
+
+    }
+
 }

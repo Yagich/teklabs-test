@@ -1,5 +1,7 @@
 package api.security;
 
+import java.util.Objects;
+
 public class AuthToken {
     private String value;
 
@@ -19,8 +21,8 @@ public class AuthToken {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        AuthToken authToken = (AuthToken) o;
-        return value != null ? value.equals(authToken.value) : authToken.value == null;
+        AuthToken that = (AuthToken) o;
+        return Objects.equals(value, that.value);
     }
 
     @Override

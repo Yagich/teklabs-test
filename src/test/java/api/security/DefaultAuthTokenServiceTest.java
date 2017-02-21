@@ -17,15 +17,18 @@ public class DefaultAuthTokenServiceTest {
 
     @Before
     public void init() {
-        authTokenService = new DefaultAuthTokenService();
-        authTokenService.expirationMinutes = 10;
         mockedUserDetails = mock(UserDetails.class);
+        authTokenService = new DefaultAuthTokenService(mockUserDetailsService(), 10);
+    }
+
+    private UserDetailsService mockUserDetailsService() {
+        UserDetailsService mockedUserDetailsService = mock(UserDetailsService.class);
+        when(mockedUserDetailsService.loadUserByUsername(testUsername)).thenReturn(mockedUserDetails);
+        return mockedUserDetailsService;
     }
 
     @Test
     public void registerUserToken() throws Exception {
-        initMockedUserDetailsService();
-
         AuthToken authToken = authTokenService.registerUserToken(testUsername);
 
         assertEquals(mockedUserDetails, authTokenService.getUserDetailsByToken(authToken));
@@ -33,17 +36,19 @@ public class DefaultAuthTokenServiceTest {
 
     @Test
     public void unregisterToken() throws Exception {
-        initMockedUserDetailsService();
-
         AuthToken authToken = authTokenService.registerUserToken(testUsername);
         authTokenService.unregisterToken(authToken);
 
         assertNull(authTokenService.getUserDetailsByToken(authToken));
     }
 
-    private void initMockedUserDetailsService() {
-        UserDetailsService mockedUserDetailsService = mock(UserDetailsService.class);
-        when(mockedUserDetailsService.loadUserByUsername(testUsername)).thenReturn(mockedUserDetails);
-        authTokenService.userDetailsService = mockedUserDetailsService;
+    @Test
+    public void lastRegisteredTokenIsValid() {
+        AuthToken authToken1 = authTokenService.registerUserToken(testUsername);
+        AuthToken authToken2 = authTokenService.registerUserToken(testUsername);
+
+        assertNull(authTokenService.getUserDetailsByToken(authToken1));
+        assertEquals(mockedUserDetails, authTokenService.getUserDetailsByToken(authToken2));
     }
+
 }
